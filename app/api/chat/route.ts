@@ -1,92 +1,66 @@
-import {streamText} from 'ai'
-import {NextRequest, NextResponse} from 'next/server'
-import {createOllama} from 'ollama-ai-provider-v2'
+import CommunicationAdapter from '@/lib/adapters/CommunicationAdapter'
+import {getOllamaProvider} from '@/lib/helpers/getOllamaProvider'
+import {getSystemInstructionsFor} from '@/lib/helpers/personality'
+import therapeuticCore from '@/lib/models/TherapeuticCore'
+import {isDev} from '@/models/consts'
+import {convertToModelMessages, streamText, UIMessage} from 'ai'
 
-const getOllamaProvider = async () => {
-  // Default to offline: try local Ollama first
+export const maxDuration = 120
+
+export const POST = async (req: Request) => {
   try {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 500) // 0.5 second timeout
-
-    const psResponse = await fetch('http://localhost:11434/api/ps', {
-      signal: controller.signal,
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
-
-    if (!psResponse.ok) {
-      throw new Error(`Local Ollama not responding (status: ${psResponse.status})`)
-    }
-
-    const psData = await psResponse.json()
-
-    // Check if gpt-oss model is currently running/loaded
-    const hasGptOssRunning = psData.models?.some(
-      (model: any) => model.name?.includes('gpt-oss') || model.name?.includes('gpt2')
-    )
-
-    if (!hasGptOssRunning) {
-      throw new Error('gpt-oss model not currently loaded/running')
-    }
-
-    clearTimeout(timeoutId)
-
-    // Verify the model can actually be used by making a test call
-    const testResponse = await fetch('http://localhost:11434/api/generate', {
-      signal: controller.signal,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-oss:20b',
-        prompt: 'test',
-        stream: false,
-        options: {num_predict: 1}, // Very short response
-      }),
-    })
-
-    if (!testResponse.ok) {
-      throw new Error(`Model test failed (status: ${testResponse.status})`)
-    }
-
-    const localProvider = createOllama({
-      baseURL: 'http://localhost:11434/api',
-    })
-    return {provider: localProvider, model: 'gpt-oss:20b', isOffline: true}
-  } catch (error) {
-    // Local Ollama not available, switch to online
-
-    const cloudProvider = createOllama({
-      baseURL: 'https://ollama.com/api',
-      headers: {
-        Authorization: `Bearer ${process.env.OLLAMA_API_KEY}`,
-      },
-    })
-    return {provider: cloudProvider, model: 'gpt-oss:120b', isOffline: false}
-  }
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const {messages, model: requestedModel} = body
+    const {messages, selectedType = null}: {messages: UIMessage[]; selectedType?: string | null} =
+      await req.json()
 
     if (!messages || !Array.isArray(messages)) {
-      return NextResponse.json({error: 'Messages array is required'}, {status: 400})
+      return new Response(JSON.stringify({error: 'Messages array is required'}), {
+        status: 400,
+        headers: {'Content-Type': 'application/json'},
+      })
     }
 
     const {provider, model, isOffline} = await getOllamaProvider()
+    console.log(
+      '🚀 Starting chat with mode:',
+      isOffline ? 'OFFLINE' : 'ONLINE-TURBO',
+      'Model:',
+      model,
+    )
 
-    const result = await streamText({
-      model: provider(requestedModel || model),
-      messages: messages,
-      temperature: 0.5,
-    })
+    let systemPrompt
+    let result
 
-    return result.toTextStreamResponse({
+    if (selectedType) {
+      const userInput = (messages[messages.length - 1] as any)?.content || ''
+
+      const problemAnalysis = therapeuticCore.analyzeProblem(userInput)
+      const baseResponse = therapeuticCore.generateResponse(problemAnalysis, selectedType)
+
+      const archetype = CommunicationAdapter.getArchetypeFromMBTI(selectedType)
+      const adapter = new CommunicationAdapter()
+      const adaptedResponse = adapter.adaptResponse(baseResponse.content, archetype)
+
+      systemPrompt = 'Respond with the following: ' + adaptedResponse.content
+      systemPrompt = getSystemInstructionsFor(selectedType) //new system
+      if (isDev) console.log(systemPrompt)
+      result = streamText({
+        model: provider(model),
+        system: systemPrompt,
+        messages: convertToModelMessages(messages),
+        temperature: 0.5,
+      })
+    } else {
+      systemPrompt =
+        'You are a thoughtful AI companion focused on self-reflection and personal growth. Provide empathetic, insightful responses that help users understand themselves better and develop actionable strategies for their challenges.'
+      result = streamText({
+        model: provider(model),
+        system: systemPrompt,
+        messages: convertToModelMessages(messages),
+        temperature: 0.5,
+      })
+    }
+
+    return result.toUIMessageStreamResponse({
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
@@ -95,13 +69,18 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Chat API error:', error)
-
-    return NextResponse.json(
-      {
+    return new Response(
+      JSON.stringify({
         error: 'Failed to generate response',
         details: error instanceof Error ? error.message : 'Unknown error',
+      }),
+      {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
       },
-      {status: 500}
     )
   }
 }

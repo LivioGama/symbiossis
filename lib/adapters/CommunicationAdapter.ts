@@ -18,6 +18,114 @@ interface CommunicationArchetype {
 }
 
 class CommunicationAdapter {
+  // Helper method to determine archetype from MBTI type
+  static getArchetypeFromMBTI(mbtiType: string): CommunicationArchetype {
+    const archetypes: Record<string, CommunicationArchetype> = {
+      // Logical Analytical Types
+      INTJ: {
+        type: 'logical_analytical',
+        preferences: {language: 'formal', structure: 'step_by_step', examples: 'data_driven'},
+      },
+      INTP: {
+        type: 'logical_analytical',
+        preferences: {language: 'technical', structure: 'exploratory', examples: 'hypothetical'},
+      },
+      ENTJ: {
+        type: 'logical_analytical',
+        preferences: {language: 'formal', structure: 'step_by_step', examples: 'data_driven'},
+      },
+      ENTP: {
+        type: 'logical_analytical',
+        preferences: {language: 'technical', structure: 'exploratory', examples: 'hypothetical'},
+      },
+
+      // Emotional Expressive Types
+      INFJ: {
+        type: 'emotional_expressive',
+        preferences: {
+          language: 'conversational',
+          structure: 'narrative',
+          examples: 'personal_stories',
+        },
+      },
+      INFP: {
+        type: 'emotional_expressive',
+        preferences: {
+          language: 'metaphorical',
+          structure: 'narrative',
+          examples: 'personal_stories',
+        },
+      },
+      ENFJ: {
+        type: 'emotional_expressive',
+        preferences: {
+          language: 'conversational',
+          structure: 'narrative',
+          examples: 'personal_stories',
+        },
+      },
+      ENFP: {
+        type: 'emotional_expressive',
+        preferences: {
+          language: 'metaphorical',
+          structure: 'exploratory',
+          examples: 'personal_stories',
+        },
+      },
+
+      // Practical Concrete Types
+      ISTJ: {
+        type: 'practical_concrete',
+        preferences: {language: 'formal', structure: 'bullet_points', examples: 'practical'},
+      },
+      ISFJ: {
+        type: 'practical_concrete',
+        preferences: {language: 'conversational', structure: 'step_by_step', examples: 'practical'},
+      },
+      ESTJ: {
+        type: 'practical_concrete',
+        preferences: {language: 'formal', structure: 'bullet_points', examples: 'practical'},
+      },
+      ESFJ: {
+        type: 'practical_concrete',
+        preferences: {language: 'conversational', structure: 'step_by_step', examples: 'practical'},
+      },
+
+      // Intuitive Abstract Types
+      ISTP: {
+        type: 'intuitive_abstract',
+        preferences: {language: 'technical', structure: 'exploratory', examples: 'hypothetical'},
+      },
+      ISFP: {
+        type: 'intuitive_abstract',
+        preferences: {
+          language: 'metaphorical',
+          structure: 'narrative',
+          examples: 'personal_stories',
+        },
+      },
+      ESTP: {
+        type: 'intuitive_abstract',
+        preferences: {language: 'conversational', structure: 'exploratory', examples: 'practical'},
+      },
+      ESFP: {
+        type: 'intuitive_abstract',
+        preferences: {
+          language: 'metaphorical',
+          structure: 'narrative',
+          examples: 'personal_stories',
+        },
+      },
+    }
+
+    return (
+      archetypes[mbtiType] || {
+        type: 'practical_concrete',
+        preferences: {language: 'conversational', structure: 'step_by_step', examples: 'practical'},
+      }
+    )
+  }
+
   adaptResponse(
     therapeuticContent: string,
     userArchetype: CommunicationArchetype,
@@ -150,114 +258,6 @@ class CommunicationAdapter {
     })
 
     return examples
-  }
-
-  // Helper method to determine archetype from MBTI type
-  static getArchetypeFromMBTI(mbtiType: string): CommunicationArchetype {
-    const archetypes: Record<string, CommunicationArchetype> = {
-      // Logical Analytical Types
-      INTJ: {
-        type: 'logical_analytical',
-        preferences: {language: 'formal', structure: 'step_by_step', examples: 'data_driven'},
-      },
-      INTP: {
-        type: 'logical_analytical',
-        preferences: {language: 'technical', structure: 'exploratory', examples: 'hypothetical'},
-      },
-      ENTJ: {
-        type: 'logical_analytical',
-        preferences: {language: 'formal', structure: 'step_by_step', examples: 'data_driven'},
-      },
-      ENTP: {
-        type: 'logical_analytical',
-        preferences: {language: 'technical', structure: 'exploratory', examples: 'hypothetical'},
-      },
-
-      // Emotional Expressive Types
-      INFJ: {
-        type: 'emotional_expressive',
-        preferences: {
-          language: 'conversational',
-          structure: 'narrative',
-          examples: 'personal_stories',
-        },
-      },
-      INFP: {
-        type: 'emotional_expressive',
-        preferences: {
-          language: 'metaphorical',
-          structure: 'narrative',
-          examples: 'personal_stories',
-        },
-      },
-      ENFJ: {
-        type: 'emotional_expressive',
-        preferences: {
-          language: 'conversational',
-          structure: 'narrative',
-          examples: 'personal_stories',
-        },
-      },
-      ENFP: {
-        type: 'emotional_expressive',
-        preferences: {
-          language: 'metaphorical',
-          structure: 'exploratory',
-          examples: 'personal_stories',
-        },
-      },
-
-      // Practical Concrete Types
-      ISTJ: {
-        type: 'practical_concrete',
-        preferences: {language: 'formal', structure: 'bullet_points', examples: 'practical'},
-      },
-      ISFJ: {
-        type: 'practical_concrete',
-        preferences: {language: 'conversational', structure: 'step_by_step', examples: 'practical'},
-      },
-      ESTJ: {
-        type: 'practical_concrete',
-        preferences: {language: 'formal', structure: 'bullet_points', examples: 'practical'},
-      },
-      ESFJ: {
-        type: 'practical_concrete',
-        preferences: {language: 'conversational', structure: 'step_by_step', examples: 'practical'},
-      },
-
-      // Intuitive Abstract Types
-      ISTP: {
-        type: 'intuitive_abstract',
-        preferences: {language: 'technical', structure: 'exploratory', examples: 'hypothetical'},
-      },
-      ISFP: {
-        type: 'intuitive_abstract',
-        preferences: {
-          language: 'metaphorical',
-          structure: 'narrative',
-          examples: 'personal_stories',
-        },
-      },
-      ESTP: {
-        type: 'intuitive_abstract',
-        preferences: {language: 'conversational', structure: 'exploratory', examples: 'practical'},
-      },
-      ESFP: {
-        type: 'intuitive_abstract',
-        preferences: {
-          language: 'metaphorical',
-          structure: 'narrative',
-          examples: 'personal_stories',
-        },
-      },
-    }
-
-    return (
-      archetypes[mbtiType] || {
-        type: 'practical_concrete',
-        preferences: {language: 'conversational', structure: 'step_by_step', examples: 'practical'},
-      }
-    )
   }
 }
 

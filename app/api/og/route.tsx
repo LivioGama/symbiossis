@@ -1,48 +1,23 @@
-import {ImageResponse} from 'next/og'
+import {NextResponse} from 'next/server'
+import axios from 'axios'
 
 export const runtime = 'edge'
 
-export const GET = async () =>
-  new ImageResponse(
-    (
-      <div
-        style={{
-          width: '100%',
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          position: 'relative',
-          backgroundColor: '#0A0A1A',
-          backgroundImage:
-            'radial-gradient(circle at 15% 50%, rgba(103, 84, 240, 0.08), transparent 25%), radial-gradient(circle at 85% 30%, rgba(87, 94, 255, 0.08), transparent 25%)',
-        }}>
-        <div
-          style={{
-            fontSize: 72,
-            position: 'relative',
-            zIndex: 1,
-            color: 'white',
-            fontWeight: 700,
-          }}>
-          Symbiossis
-        </div>
-        <div
-          style={{
-            fontSize: 28,
-            position: 'relative',
-            zIndex: 1,
-            marginTop: 24,
-            color: '#FAFAFA',
-            fontWeight: 500,
-          }}>
-          Your tailor-made digital &quot;psychologist&quot;
-        </div>
-      </div>
-    ),
-    {
-      width: 1200,
-      height: 630,
-    },
-  )
+export const GET = async () => {
+  try {
+    const imageUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/hero.webp`
+    const response = await axios.get(imageUrl, {
+      responseType: 'arraybuffer',
+    })
+
+    return new NextResponse(response.data, {
+      headers: {
+        'Content-Type': 'image/webp',
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      },
+    })
+  } catch (error) {
+    console.error('Error fetching OG image:', error)
+    return new NextResponse('Image not found', {status: 404})
+  }
+}

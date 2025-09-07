@@ -1,255 +1,196 @@
 'use client'
 
-import React, {useState} from 'react'
-import {useForm} from 'react-hook-form'
+import GlassCard from '@/components/ui/GlassCard'
+import Store from '@/models/Store'
+import {observer} from '@legendapp/state/react'
+import {AnimatePresence, motion} from 'framer-motion'
+import {useState} from 'react'
+import {FaArrowRight} from 'react-icons/fa'
+import ResultScreen from './ResultScreen'
+import {questions, therapeuticDescriptions} from './therapeutic-data'
+import {TherapeuticPreferencesProps} from './therapeutic-types'
 
-interface TherapeuticPreferencesData {
-  interaction_style: 'a' | 'b'
-  focus_preference: 'a' | 'b'
-  counselor_style: 'a' | 'b'
-  session_structure: 'a' | 'b'
-}
+const TherapeuticPreferences = observer(({onComplete}: TherapeuticPreferencesProps) => {
+  const [currentStep, setCurrentStep] = useState(0)
+  const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [isCompleted, setIsCompleted] = useState(false)
+  const [psychologicalPreference, setPsychologicalPreference] = useState<string>('')
+  const [isTransitioning, setIsTransitioning] = useState(false)
+  const startOnboardingTrigger = Store.startOnboardingTrigger.get()
 
-interface TherapeuticPreferencesProps {
-  onComplete: (mbtiType: string) => void
-}
+  const handleAnswer = (questionId: string, value: string) => {
+    if (isTransitioning) return
 
-// Hidden MBTI assessment disguised as therapeutic communication preferences
-const therapeuticPreferences = [
-  {
-    id: 'interaction_style',
-    text: 'When working through personal challenges, what helps you most?',
-    options: [
-      {
-        id: 'a',
-        text: 'Talking it through with others and getting different perspectives',
-        weight: {EI_score: 2},
-      },
-      {
-        id: 'b',
-        text: 'Taking time alone to reflect and process internally first',
-        weight: {EI_score: -2},
-      },
-    ],
-  },
-  {
-    id: 'focus_preference',
-    text: 'In therapy, which approach resonates more with you?',
-    options: [
-      {
-        id: 'a',
-        text: 'Exploring possibilities, patterns, and the bigger picture of my life',
-        weight: {NS_score: 2},
-      },
-      {
-        id: 'b',
-        text: 'Focusing on practical, concrete steps I can take right now',
-        weight: {NS_score: -2},
-      },
-    ],
-  },
-  {
-    id: 'counselor_style',
-    text: 'Do you prefer that your counselor talk to you warmly or logically?',
-    options: [
-      {
-        id: 'a',
-        text: 'Logically - with clear reasoning and objective analysis',
-        weight: {TF_score: 2},
-      },
-      {
-        id: 'b',
-        text: 'Warmly - with empathy and understanding of my feelings',
-        weight: {TF_score: -2},
-      },
-    ],
-  },
-  {
-    id: 'session_structure',
-    text: 'What kind of session structure works best for you?',
-    options: [
-      {
-        id: 'a',
-        text: 'Clear agenda with specific goals and outcomes planned',
-        weight: {JP_score: 2},
-      },
-      {
-        id: 'b',
-        text: 'Flexible conversation that adapts to what comes up naturally',
-        weight: {JP_score: -2},
-      },
-    ],
-  },
-]
+    setIsTransitioning(true)
 
-// Calculate MBTI type from therapeutic preferences (hidden from user)
-const determineTherapeuticStyle = (responses: TherapeuticPreferencesData): string => {
-  const scores = {EI_score: 0, NS_score: 0, TF_score: 0, JP_score: 0}
+    const newAnswers = {...answers, [questionId]: value}
+    setAnswers(newAnswers)
 
-  // Calculate scores from responses
-  Object.entries(responses).forEach(([questionId, answerId]) => {
-    const question = therapeuticPreferences.find(q => q.id === questionId)
-    const option = question?.options.find(o => o.id === answerId)
-    if (option?.weight) {
-      Object.entries(option.weight).forEach(([dimension, score]) => {
-        scores[dimension as keyof typeof scores] += score
-      })
-    }
-  })
+    if (currentStep >= questions.length - 1) {
+      const allQuestionsAnswered = questions.every(q => newAnswers[q.id])
 
-  // Convert scores to MBTI type
-  const E_or_I = scores.EI_score > 0 ? 'E' : 'I'
-  const N_or_S = scores.NS_score > 0 ? 'N' : 'S'
-  const T_or_F = scores.TF_score > 0 ? 'T' : 'F'
-  const J_or_P = scores.JP_score > 0 ? 'J' : 'P'
+      if (allQuestionsAnswered) {
+        const interactionPref = newAnswers.interaction_style
+        const focusPref = newAnswers.focus_preference
+        const counselorPref = newAnswers.counselor_style
+        const sessionPref = newAnswers.session_structure
 
-  return `${E_or_I}${N_or_S}${T_or_F}${J_or_P}`
-}
+        const preferenceType = `${interactionPref}${focusPref}${counselorPref}${sessionPref}`
 
-const TherapeuticPreferences: React.FC<TherapeuticPreferencesProps> = ({onComplete}) => {
-  const [currentQuestion, setCurrentQuestion] = useState(0)
-  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null)
-  const {register, handleSubmit, watch, setValue} = useForm<TherapeuticPreferencesData>()
-  const [responses, setResponses] = useState<Partial<TherapeuticPreferencesData>>({})
-
-  const currentQ = therapeuticPreferences[currentQuestion]
-  const isLastQuestion = currentQuestion === therapeuticPreferences.length - 1
-  const watchedAnswer = watch(currentQ.id as keyof TherapeuticPreferencesData)
-
-  // Sync selectedAnswer with form state
-  React.useEffect(() => {
-    if (selectedAnswer !== watchedAnswer) {
-      setValue(currentQ.id as keyof TherapeuticPreferencesData, selectedAnswer as any)
-    }
-  }, [selectedAnswer, watchedAnswer, currentQ.id, setValue])
-
-  // Reset selectedAnswer when moving to next question
-  React.useEffect(() => {
-    setSelectedAnswer(null)
-  }, [currentQuestion])
-
-  const handleNext = () => {
-    if (!selectedAnswer || !watchedAnswer) return
-
-    const newResponses = {...responses, [currentQ.id]: selectedAnswer}
-    setResponses(newResponses)
-
-    if (isLastQuestion) {
-      // Calculate MBTI type and complete
-      const mbtiType = determineTherapeuticStyle(newResponses as TherapeuticPreferencesData)
-      onComplete(mbtiType)
+        setPsychologicalPreference(preferenceType)
+        setIsCompleted(true)
+      } else {
+        setIsTransitioning(false)
+      }
     } else {
-      setCurrentQuestion(currentQuestion + 1)
-      // selectedAnswer will be reset by useEffect
+      setCurrentStep(prev => {
+        const nextStep = prev + 1
+        return Math.min(nextStep, questions.length - 1)
+      })
+      setIsTransitioning(false)
     }
   }
 
-  const handlePrevious = () => {
-    if (currentQuestion > 0) {
-      setCurrentQuestion(currentQuestion - 1)
-    }
+  const safeCurrentStep = Math.min(currentStep, questions.length - 1)
+  const currentQuestion = questions[safeCurrentStep]
+  const progress = (safeCurrentStep / questions.length) * 100
+
+  if (isCompleted) {
+    return (
+      <ResultScreen
+        psychologicalPreference={psychologicalPreference}
+        answers={answers}
+        therapeuticDescriptions={therapeuticDescriptions}
+        onComplete={() => onComplete(psychologicalPreference)}
+      />
+    )
+  }
+
+  if (!currentQuestion) {
+    return null
   }
 
   return (
-    <div className='max-w-2xl mx-auto p-6 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10'>
-      <div className='text-center mb-8'>
-        <h2 className='text-2xl font-semibold text-foreground mb-2'>
-          Personalize Your Support Experience
-        </h2>
-        <p className='text-foreground/70'>
-          Help us understand your preferred communication style so we can provide the most helpful
-          guidance.
-        </p>
-      </div>
-
-      {/* Progress indicator */}
-      <div className='mb-8'>
-        <div className='flex justify-between text-sm text-foreground/60 mb-2'>
-          <span>
-            Question {currentQuestion + 1} of {therapeuticPreferences.length}
-          </span>
-          <span>{Math.round((currentQuestion / therapeuticPreferences.length) * 100)}%</span>
-        </div>
-        <div className='w-full bg-white/10 rounded-full h-2 overflow-hidden'>
-          <div
-            key={currentQuestion}
-            className='bg-primary h-2 rounded-full transition-all duration-500 ease-out'
-            style={{width: `${(currentQuestion / therapeuticPreferences.length) * 100}%`}}
-          />
-        </div>
-      </div>
-
-      {/* Question */}
-      <div className='mb-8'>
-        <h3 className='text-xl text-foreground mb-6 leading-relaxed'>{currentQ.text}</h3>
-
-        {!selectedAnswer && (
-          <div className='mb-4 p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg'>
-            <p className='text-sm text-orange-400'>Please select an option to continue</p>
+    <div className='min-h-screen flex items-center justify-center p-4'>
+      <motion.div
+        initial={{opacity: 0, scale: 0.9}}
+        animate={{
+          opacity: 1,
+          scale: startOnboardingTrigger ? [0.9, 1.1, 1] : 1,
+        }}
+        transition={{
+          type: 'spring',
+          stiffness: 100,
+          damping: 15,
+          scale: {duration: 0.5, times: [0, 0.5, 1]},
+        }}
+        className='w-full max-w-md'>
+        {/* Progress Bar */}
+        <div className='mb-6'>
+          <div className='flex justify-between items-center mb-2'>
+            <span className='text-sm text-sky-600'>
+              Question {safeCurrentStep + 1} of {questions.length}
+            </span>
+            <span className='text-sm text-sky-600'>{Math.round(progress)}% Complete</span>
           </div>
-        )}
+          <div className='w-full bg-blue-100 rounded-full h-2 overflow-hidden'>
+            <motion.div
+              className='h-full bg-sky-600'
+              initial={{width: 0}}
+              animate={{width: `${progress}%`}}
+              transition={{type: 'spring', stiffness: 100, damping: 15}}
+            />
+          </div>
+        </div>
 
-        <div className='space-y-4'>
-          {currentQ.options.map(option => (
-            <label
-              key={option.id}
-              className={`block p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
-                selectedAnswer === option.id
-                  ? 'border-primary bg-primary/10'
-                  : 'border-white/20 hover:border-white/40'
-              }`}
-              onClick={() => setSelectedAnswer(option.id)}>
-              <input
-                type='radio'
-                value={option.id}
-                {...register(currentQ.id as keyof TherapeuticPreferencesData, {required: true})}
-                className='sr-only'
-                onChange={e => {
-                  setSelectedAnswer(e.target.value)
-                  setValue(currentQ.id as keyof TherapeuticPreferencesData, e.target.value as any)
-                }}
-              />
-              <div className='flex items-start gap-3'>
-                <div
-                  className={`w-4 h-4 rounded-full border-2 mt-0.5 flex-shrink-0 ${
-                    selectedAnswer === option.id ? 'border-primary bg-primary' : 'border-white/40'
-                  }`}>
-                  {selectedAnswer === option.id && (
-                    <div className='w-full h-full rounded-full bg-white scale-50' />
-                  )}
-                </div>
-                <span className='text-foreground leading-relaxed'>{option.text}</span>
+        <AnimatePresence mode='wait'>
+          <motion.div
+            key={currentStep}
+            initial={{opacity: 0, x: 50}}
+            animate={{opacity: 1, x: 0}}
+            exit={{opacity: 0, x: -50}}
+            transition={{type: 'spring', stiffness: 100}}>
+            <GlassCard padding='lg' className='bg-white shadow-sm'>
+              <div className='mb-6'>
+                <h2 className='text-xl font-medium text-neutral-700 mb-2'>
+                  {currentQuestion.text}
+                </h2>
+                <p className='text-neutral-600 text-sm'>
+                  Choose the option that best describes your preference
+                </p>
               </div>
-            </label>
-          ))}
-        </div>
-      </div>
 
-      {/* Navigation buttons */}
-      <div className='flex justify-between items-center'>
-        <div>
-          {currentQuestion > 0 && (
-            <button
-              type='button'
-              onClick={handlePrevious}
-              className='px-6 py-2 text-foreground/70 hover:text-foreground transition-colors'>
-              ← Previous
-            </button>
-          )}
-        </div>
+              <div className='space-y-3'>
+                {currentQuestion.options.map((option, index) => (
+                  <motion.div
+                    key={option.value}
+                    initial={{opacity: 0, y: 20}}
+                    animate={{opacity: 1, y: 0}}
+                    transition={{delay: index * 0.1}}>
+                    <button
+                      onClick={() => handleAnswer(currentQuestion.id, option.value)}
+                      disabled={isTransitioning}
+                      className={`w-full p-4 text-left border rounded-lg transition-all duration-300 group ${
+                        answers[currentQuestion.id] === option.value
+                          ? 'bg-blue-50 border-gray-400 shadow-sm'
+                          : 'bg-white hover:bg-blue-25 border-gray-300 hover:border-gray-400'
+                      } ${isTransitioning ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                      <div className='flex items-start gap-4'>
+                        <div
+                          className={`w-5 h-5 rounded-full border flex items-center justify-center mt-0.5 transition-all duration-300 ${
+                            answers[currentQuestion.id] === option.value
+                              ? 'border-gray-400 bg-blue-50'
+                              : 'border-gray-300 group-hover:border-gray-400'
+                          }`}>
+                          <motion.div
+                            className={`w-2 h-2 rounded-full ${
+                              answers[currentQuestion.id] === option.value ? 'bg-sky-600' : ''
+                            }`}
+                            initial={{scale: 0, opacity: 0}}
+                            animate={{
+                              scale: answers[currentQuestion.id] === option.value ? 1 : 0,
+                              opacity: answers[currentQuestion.id] === option.value ? 1 : 0,
+                            }}
+                            transition={{type: 'spring', stiffness: 400, damping: 20}}
+                          />
+                        </div>
+                        <div className='flex-1'>
+                          <h3 className='font-medium text-neutral-700 text-sm'>{option.text}</h3>
+                          {option.description && (
+                            <p className='text-sm text-neutral-600 mt-1'>{option.description}</p>
+                          )}
+                        </div>
+                        <FaArrowRight className='text-neutral-400 group-hover:text-neutral-500 transition-colors text-sm' />
+                      </div>
+                    </button>
+                  </motion.div>
+                ))}
+              </div>
 
-        <div className='flex gap-3'>
-          <button
-            type='button'
-            onClick={handleNext}
-            disabled={!selectedAnswer || !watchedAnswer}
-            className='px-8 py-3 bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-medium transition-all duration-200'>
-            {isLastQuestion ? 'Complete Setup' : 'Next →'}
-          </button>
-        </div>
-      </div>
+              {/* Progress Dots */}
+              <div className='flex items-center justify-center mt-6'>
+                <div className='flex gap-2'>
+                  {questions.map((_, index) => (
+                    <motion.div
+                      key={index}
+                      className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                        index <= safeCurrentStep ? 'bg-sky-600' : 'bg-blue-200'
+                      }`}
+                      whileHover={{scale: 1.2}}
+                      animate={{
+                        scale: index === safeCurrentStep ? 1.1 : 1,
+                      }}
+                      transition={{type: 'spring', stiffness: 300, damping: 20}}
+                    />
+                  ))}
+                </div>
+              </div>
+            </GlassCard>
+          </motion.div>
+        </AnimatePresence>
+      </motion.div>
     </div>
   )
-}
+})
 
 export default TherapeuticPreferences

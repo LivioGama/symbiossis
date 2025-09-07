@@ -1,7 +1,7 @@
 import {observable} from '@legendapp/state'
+import {enable$GetSet} from '@legendapp/state/config/enable$GetSet'
 import {ObservablePersistLocalStorage} from '@legendapp/state/persist-plugins/local-storage'
 import {configureSynced, syncObservable} from '@legendapp/state/sync'
-import {enable$GetSet} from '@legendapp/state/config/enable$GetSet'
 
 enable$GetSet()
 
@@ -13,12 +13,18 @@ const syncPlugin = configureSynced({
 
 const messages = observable<any[]>([])
 const userTherapeuticStyle = observable<string | null>(null)
+const startOnboardingTrigger = observable(false)
 
 const Store = {
   messages,
   userTherapeuticStyle,
+  startOnboardingTrigger,
   resetMessages: () => {
     messages.$ = []
+  },
+  triggerStartOnboarding: () => {
+    startOnboardingTrigger.$ = true
+    setTimeout(() => (startOnboardingTrigger.$ = false), 1500)
   },
 }
 

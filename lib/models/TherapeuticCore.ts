@@ -23,7 +23,7 @@ interface TherapeuticCore {
 }
 
 class TherapeuticEngine implements TherapeuticCore {
-  analyzeProblem(userInput: string, context: string[] = []): ProblemAnalysis {
+  analyzeProblem(userInput: string): ProblemAnalysis {
     // Analyze user input for therapeutic content
     const input = userInput.toLowerCase()
 
@@ -33,11 +33,23 @@ class TherapeuticEngine implements TherapeuticCore {
       primaryIssue = 'anxiety'
     } else if (input.includes('depress') || input.includes('sad') || input.includes('hopeless')) {
       primaryIssue = 'depression'
-    } else if (input.includes('relationship') || input.includes('conflict') || input.includes('communication')) {
+    } else if (
+      input.includes('relationship') ||
+      input.includes('conflict') ||
+      input.includes('communication')
+    ) {
       primaryIssue = 'relationship issues'
-    } else if (input.includes('stress') || input.includes('overwhelm') || input.includes('pressure')) {
+    } else if (
+      input.includes('stress') ||
+      input.includes('overwhelm') ||
+      input.includes('pressure')
+    ) {
       primaryIssue = 'stress management'
-    } else if (input.includes('self-esteem') || input.includes('confidence') || input.includes('worth')) {
+    } else if (
+      input.includes('self-esteem') ||
+      input.includes('confidence') ||
+      input.includes('worth')
+    ) {
       primaryIssue = 'self-esteem'
     }
 
@@ -81,7 +93,7 @@ class TherapeuticEngine implements TherapeuticCore {
       underlyingFactors,
       immediateNeeds,
       longTermGoals: ['develop coping skills', 'build resilience', 'improve self-awareness'],
-      riskLevel
+      riskLevel,
     }
   }
 
@@ -94,7 +106,7 @@ class TherapeuticEngine implements TherapeuticCore {
       content: adaptedResponse,
       therapeuticGoals: analysis.longTermGoals,
       interventionType: this.determineInterventionType(analysis),
-      confidence: this.calculateConfidence(analysis)
+      confidence: this.calculateConfidence(analysis),
     }
   }
 
@@ -102,7 +114,9 @@ class TherapeuticEngine implements TherapeuticCore {
     // Validate that response meets therapeutic standards
     const hasContent = response.content.length > 50
     const hasGoals = response.therapeuticGoals.length > 0
-    const validIntervention = ['supportive', 'exploratory', 'directive', 'educational'].includes(response.interventionType)
+    const validIntervention = ['supportive', 'exploratory', 'directive', 'educational'].includes(
+      response.interventionType,
+    )
     const validConfidence = response.confidence >= 0 && response.confidence <= 1
 
     return hasContent && hasGoals && validIntervention && validConfidence
@@ -165,7 +179,9 @@ class TherapeuticEngine implements TherapeuticCore {
     return adaptedResponse
   }
 
-  private determineInterventionType(analysis: ProblemAnalysis): 'supportive' | 'exploratory' | 'directive' | 'educational' {
+  private determineInterventionType(
+    analysis: ProblemAnalysis,
+  ): 'supportive' | 'exploratory' | 'directive' | 'educational' {
     if (analysis.riskLevel === 'high') {
       return 'directive'
     } else if (analysis.immediateNeeds.includes('understanding and insight')) {

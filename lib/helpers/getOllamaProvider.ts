@@ -1,13 +1,11 @@
-export const runtime = 'edge'
+import {GPT_OSS_120B_MODEL, GPT_OSS_20B_MODEL} from '@/models/consts'
+import {createOllama} from 'ollama-ai-provider-v2'
 
-import {GPT_OSS_20B_MODEL} from '@/models/consts'
-
-const checkOllamaConnection = async () => {
+export const getOllamaProvider = async () => {
   try {
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 500)
+    const timeoutId = setTimeout(() => controller.abort(), 500) // 0.5 second timeout
 
-    // Check if Ollama is running and has gpt-oss model loaded
     const psResponse = await fetch('http://localhost:11434/api/ps', {
       signal: controller.signal,
       method: 'GET',
@@ -23,9 +21,7 @@ const checkOllamaConnection = async () => {
     const psData = await psResponse.json()
 
     // Check if gpt-oss model is currently running/loaded
-    const hasGptOssRunning = psData.models?.some(
-      (model: any) => model.name?.includes('gpt-oss') || model.name?.includes('gpt2'),
-    )
+    const hasGptOssRunning = psData.models?.some((model: any) => model.name?.includes('gpt-oss'))
 
     if (!hasGptOssRunning) {
       throw new Error('gpt-oss model not currently loaded/running')
@@ -52,20 +48,16 @@ const checkOllamaConnection = async () => {
       throw new Error(`Model test failed (status: ${testResponse.status})`)
     }
 
-    return {isOffline: true, mode: 'offline'}
+    const localProvider = createOllama()
+    return {provider: localProvider, model: GPT_OSS_20B_MODEL, isOffline: true}
   } catch {
-    return {isOffline: false, mode: 'online-turbo'}
+    // Local Ollama not available, switch to online
+    const cloudProvider = createOllama({
+      baseURL: 'https://ollama.com/api',
+      headers: {
+        Authorization: `Bearer ${process.env.OLLAMA_API_KEY}`,
+      },
+    })
+    return {provider: cloudProvider, model: GPT_OSS_120B_MODEL, isOffline: false}
   }
-}
-
-export const GET = async () => {
-  const {isOffline, mode} = await checkOllamaConnection()
-
-  return new Response(JSON.stringify({isOffline, mode}), {
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Ollama-Mode': mode,
-      'Access-Control-Allow-Origin': '*',
-    },
-  })
 }

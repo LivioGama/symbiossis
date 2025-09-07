@@ -5,9 +5,9 @@
  *   if (await confirm("Are you sure?")) ...
  *   const result = await prompt("Enter a URL", "http://")
  */
-import {createContext, ReactNode, useCallback, useContext, useRef, useState} from 'react'
-import Modal from '@/components/ui/modal'
 import Button from '@/components/ui/button'
+import Modal from '@/components/ui/modal'
+import {createContext, ReactNode, useCallback, useContext, useRef, useState} from 'react'
 
 enum ModalType {
   Alert,
@@ -90,7 +90,7 @@ export const ModalProvider = ({children}: {children: ReactNode}) => {
 
           setModal(
             <div className='fixed inset-0 z-50 flex items-center justify-center'>
-              <div className='absolute inset-0 bg-black bg-opacity-50' onClick={handleClose} />
+              <div className='absolute inset-0 bg-neutral-900/50' onClick={handleClose} />
               <div className='relative bg-white rounded-lg shadow-lg max-w-md w-full mx-4'>
                 <div className='p-6'>
                   <div className='flex gap-4 items-center'>
@@ -101,7 +101,7 @@ export const ModalProvider = ({children}: {children: ReactNode}) => {
                         <input
                           ref={input}
                           defaultValue={opts.defaultValue}
-                          className='w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500'
+                          className='w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-600'
                         />
                       )}
                     </div>
@@ -110,7 +110,7 @@ export const ModalProvider = ({children}: {children: ReactNode}) => {
                 <div className='flex justify-end gap-3 p-6 pt-0'>
                   {type !== ModalType.Alert && (
                     <button
-                      className='px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500'
+                      className='px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-sky-600'
                       onClick={handleCancel}
                       {...opts.cancelButtonProps}>
                       {opts.cancelText ?? 'Cancel'}
@@ -118,7 +118,7 @@ export const ModalProvider = ({children}: {children: ReactNode}) => {
                   )}
                   <button
                     ref={ok}
-                    className='px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500'
+                    className='px-4 py-2 bg-sky-600 text-white rounded-md hover:bg-sky-900 focus:outline-none focus:ring-2 focus:ring-sky-600'
                     onClick={handleOK}
                     {...opts.okButtonProps}>
                     {opts.okText ?? 'OK'}
