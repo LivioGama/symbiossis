@@ -1,0 +1,547 @@
+'use client'
+
+import React, {useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react'
+import Logo from '@/components/general/Logo'
+import ConnectionStatus from '@/components/general/ConnectionStatus'
+import TherapeuticPreferences from '@/components/onboarding/TherapeuticPreferences'
+import useTracker from '@/hooks/useTracker'
+import {observer} from '@legendapp/state/react'
+import {isDev} from 'models/consts'
+import Store from 'models/Store'
+import {useForm} from 'react-hook-form'
+import ReactMarkdown from 'react-markdown'
+import {useChat} from '@ai-sdk/react'
+
+// Simple error handler
+const handleError = (error: any) => {
+  console.error('An error occurred:', error)
+}
+// Native empty check function
+const isEmpty = (value: any) => {
+  if (Array.isArray(value)) return value.length === 0
+  if (typeof value === 'object' && value !== null) return Object.keys(value).length === 0
+  return !value
+}
+
+const defaultValues = {
+  query: isDev ? '' : '',
+}
+
+const Page = observer(() => {
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    formState: {isValid},
+  } = useForm({defaultValues})
+
+  const [isEditing, setIsEditing] = useState(false)
+  const editInputRef = useRef<HTMLTextAreaElement>(null)
+  const {track} = useTracker()
+  const ref = useRef<HTMLFormElement>(null)
+  const chatContainerRef = useRef<HTMLDivElement>(null)
+  const [textareaHeight, setTextareaHeight] = useState<number>()
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Check if user has completed therapeutic preferences
+  const hasCompletedOnboarding = Store.userTherapeuticStyle.$ !== null
+
+  const {
+    messages: chatMessages,
+    setMessages,
+    append,
+    reload,
+    isLoading: chatIsLoading,
+    status,
+  } = useChat({
+    api: '/api/completion',
+    body: hasCompletedOnboarding ? { selectedType: Store.userTherapeuticStyle.$ } : {},
+  })
+
+  useEffect(() => {
+    setMessages(Store.messages.$)
+  }, [])
+
+  useEffect(() => {
+    if (isEmpty(chatMessages)) return
+    Store.messages.$ = chatMessages
+  }, [chatMessages])
+
+  useEffect(() => {
+    if (chatContainerRef.current && chatMessages.length > 0) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
+    }
+  }, [chatMessages])
+
+  const handleEditSubmit = async (messageId: string, newContent: string) => {
+    const messageIndex = chatMessages.findIndex(msg => msg.id === messageId)
+    if (messageIndex === -1) return
+
+    const message = chatMessages[messageIndex]
+    if (newContent.trim() === message.content) {
+      setIsEditing(false)
+      return
+    }
+
+    const updatedMessages = [...chatMessages]
+    updatedMessages[messageIndex].content = newContent.trim()
+
+    const truncatedMessages = updatedMessages.slice(0, messageIndex + 1)
+    setMessages(truncatedMessages)
+    await reload()
+
+    Store.messages.$ = truncatedMessages
+    setIsEditing(false)
+  }
+
+  const handleEditKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      const messageId = e.currentTarget.getAttribute('data-message-id')
+      messageId && handleEditSubmit(messageId, e.currentTarget.value)
+    } else if (e.key === 'Escape') {
+      setIsEditing(false)
+    }
+  }
+
+  useLayoutEffect(() => {
+    if (isEditing && editInputRef.current) {
+      const height = editInputRef.current.scrollHeight
+      setTextareaHeight(height)
+      editInputRef.current.focus()
+      editInputRef.current.setSelectionRange(
+        editInputRef.current.value.length,
+        editInputRef.current.value.length,
+      )
+    }
+  }, [isEditing])
+
+  const onSubmit = useCallback(
+    async (data: typeof defaultValues) => {
+      const newMessage = data.query.trim()
+
+      if (!newMessage) return
+
+      try {
+        setMessages([
+          ...chatMessages,
+          {role: 'user', content: newMessage, id: Math.random().toString()},
+        ])
+        setValue('query', '')
+        // Reload with updated messages
+        await reload()
+      } catch (e) {
+        handleError(e)
+      }
+    },
+    [setValue, setMessages, reload, hasCompletedOnboarding],
+  )
+
+  const onKeyDown = (event: {key: string; shiftKey: boolean}) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      ref.current?.requestSubmit()
+    }
+  }
+
+  const handleReset = () => {
+    Store.resetMessages()
+    reset(defaultValues)
+    setMessages([])
+  }
+
+  const handleDelete = (messageId: string) => {
+    const messageIndex = chatMessages.findIndex(msg => msg.id === messageId)
+    if (messageIndex === -1) return
+
+    const updatedMessages = chatMessages.filter((_, i) => i !== messageIndex)
+    setMessages(updatedMessages)
+    Store.messages.$ = updatedMessages
+  }
+
+  const renderInputArea = () => {
+    return (
+      <div className='flex-none py-4 bg-black/20 backdrop-blur-md border-t border-white/5'>
+        <div className='flex justify-between items-center mb-3'>
+          <p className='text-sm px-4 italic'>
+            Try to give as much detail as possible (anonymous). The clearer your question, the
+            clearer the answer will be...
+          </p>
+          {!isEmpty(chatMessages) && (
+            <button
+              onClick={handleReset}
+              className='rounded-lg glass hover:glass-dark border border-white/10 hover:border-primary/50 transition-all duration-300 text-foreground/80 hover:text-primary px-3 py-1 text-sm z-10'>
+              Start new conversation
+            </button>
+          )}
+        </div>
+        <form onSubmit={handleSubmit(onSubmit)} ref={ref} className='relative'>
+          <textarea
+            className='w-full px-5 py-4 pr-13 rounded-xl glass bg-white/5 border border-white/10 focus:border-primary/50 focus:ring-1 focus:ring-primary/30 placeholder:text-white/30 outline-none transition-all duration-300 resize-none text-foreground no-scrollbar'
+            disabled={status !== 'ready'}
+            {...register('query', {required: true, minLength: 3})}
+            placeholder='Describe with details your psychological challenge...'
+            onFocus={() => track('chatbot_input_focus')}
+            onKeyDown={onKeyDown}
+            rows={3}
+            ref={textareaRef}
+          />
+          <div className='absolute right-2 bottom-2 flex items-center gap-2'>
+            <button
+              type='submit'
+              disabled={!isValid || chatIsLoading}
+              className='px-4 py-2 rounded-lg glass hover:glass-dark border border-white/10 hover:border-primary/50 transition-all duration-300 text-foreground/80 hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed'>
+              Send
+            </button>
+          </div>
+        </form>
+      </div>
+    )
+  }
+
+  // Handle completion of therapeutic preferences
+  const handleOnboardingComplete = (mbtiType: string) => {
+    Store.setTherapeuticStyle(mbtiType)
+  }
+
+  const handleSkipOnboarding = () => {
+    // Skip to generic mode
+    Store.setTherapeuticStyle('')
+  }
+
+  return (
+    <div className='h-[calc(100vh-4rem)] flex flex-col'>
+      <main className='flex-1 container mx-auto px-4 flex flex-col'>
+        <div className='flex-none py-2'>
+          <div className='flex justify-between items-center mb-4'>
+            <div className='text-center flex-1'>
+              <p className='text-foreground/80 text-sm'>
+                <span className='text-gradient font-medium'>Symbiossis</span> is an AI-powered tool for
+                thoughtful self-reflection and personalized guidance.
+              </p>
+            </div>
+            <div className='ml-4'>
+              <ConnectionStatus />
+            </div>
+          </div>
+        </div>
+
+        {!hasCompletedOnboarding ? (
+          <div className='flex-1 flex items-center justify-center'>
+            <TherapeuticPreferences
+              onComplete={handleOnboardingComplete}
+              onSkip={handleSkipOnboarding}
+            />
+          </div>
+        ) : (
+          <div className='flex-1 relative w-full rounded-2xl overflow-hidden shadow-xl flex flex-col min-h-0'>
+            {/* Ambient background */}
+            <div className='absolute inset-0 bg-gradient-to-br from-secondary via-secondary/95 to-black -z-10'>
+              <div className='absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(var(--primary),0.1),transparent_50%)]' />
+              <div className='absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(var(--accent),0.05),transparent_45%)]' />
+              <div className="absolute inset-0 bg-[url('/assets/noise.png')] opacity-[0.03] mix-blend-soft-light" />
+            </div>
+
+            <div ref={chatContainerRef} className='min-h-0 flex-1 overflow-y-auto'>
+              <div className='p-6 space-y-8'>
+                {chatMessages.length === 0 ? (
+                  <div className='h-full flex flex-col items-center justify-center text-center p-6 animate-fade-in'>
+                    <div className='size-20 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 border border-white/10 flex items-center justify-center mb-6 animate-pulse'>
+                      <Logo />
+                    </div>
+                    <h2 className='text-foreground/60 max-w-md text-xl md:text-2xl mb-4'>
+                      Welcome to Symbiossis
+                    </h2>
+                    <p className='font-light text-foreground/80'>
+                      Your AI companion is ready to help you with thoughtful self-reflection and personalized guidance.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {chatMessages.map((message, index) => (
+                      <div key={message.id} className='flex items-start gap-4 animate-fade-in'>
+                        {message.role === 'user' ? (
+                          <>
+                            <div className='size-10 rounded-full bg-secondary border border-white/10 items-center justify-center flex-shrink-0 mt-1 hidden md:flex'>
+                              <span className='font-semibold text-foreground/80'>You</span>
+                            </div>
+                            <div className='flex flex-col gap-2 w-full md:max-w-[calc(100%-5rem)]'>
+                              <div className='glass p-5 rounded-2xl rounded-tl-none shadow-lg'>
+                                {isEditing && message.role === 'user' ? (
+                                  <textarea
+                                    ref={editInputRef}
+                                    defaultValue={message.content}
+                                    data-message-id={message.id}
+                                    onKeyDown={handleEditKeyDown}
+                                    onBlur={e => handleEditSubmit(message.id, e.target.value)}
+                                    className='w-full bg-transparent text-foreground outline-none resize-none p-0 m-0 block leading-normal'
+                                    style={{
+                                      minHeight: 'unset',
+                                      height: textareaHeight ? `${textareaHeight}px` : 'auto',
+                                      font: 'inherit',
+                                    }}
+                                  />
+                                ) : (
+                                  <p className='text-foreground whitespace-pre-line leading-normal'>
+                                    {message.content}
+                                  </p>
+                                )}
+                              </div>
+                              {!chatIsLoading && !isEditing && message.role === 'user' && (
+                                <div className='flex justify-end gap-2'>
+                                  <button
+                                    type='button'
+                                    onClick={() => setIsEditing(true)}
+                                    className='flex items-center gap-2 px-2 py-1 rounded-md text-foreground/60 hover:text-foreground/80 transition-colors'
+                                    aria-label='edit message'>
+                                    <svg
+                                      xmlns='http://www.w3.org/2000/svg'
+                                      width='14'
+                                      height='14'
+                                      viewBox='0 0 24 24'
+                                      fill='none'
+                                      stroke='currentColor'
+                                      strokeWidth='2'
+                                      strokeLinecap='round'
+                                      strokeLinejoin='round'>
+                                      <path d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z' />
+                                    </svg>
+                                    <span className='text-xs'>Edit</span>
+                                  </button>
+                                  <button
+                                    type='button'
+                                    onClick={() => handleDelete(message.id)}
+                                    className='flex items-center gap-2 px-2 py-1 rounded-md text-foreground/60 hover:text-red-400 transition-colors'
+                                    aria-label='delete message'>
+                                    <svg
+                                      xmlns='http://www.w3.org/2000/svg'
+                                      width='14'
+                                      height='14'
+                                      viewBox='0 0 24 24'
+                                      fill='none'
+                                      stroke='currentColor'
+                                      strokeWidth='2'
+                                      strokeLinecap='round'
+                                      strokeLinejoin='round'>
+                                      <path d='M3 6h18' />
+                                      <path d='M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6' />
+                                      <path d='M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2' />
+                                    </svg>
+                                    <span className='text-xs'>Delete</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className='hidden md:flex'>
+                              <Logo />
+                            </div>
+                            <div className='flex flex-col gap-2 w-full md:max-w-[calc(100%-5rem)]'>
+                              <div className='glass-dark p-5 rounded-2xl rounded-tl-none shadow-lg md:max-w-[calc(100%-5rem)] transition-all duration-500 opacity-100 translate-y-0'>
+                                {chatIsLoading && index === chatMessages.length - 1 ? (
+                                  <div className='flex space-x-2 items-center py-2'>
+                                    <div className='size-2 bg-primary rounded-full animate-pulse' />
+                                    <div className='size-2 bg-primary rounded-full animate-pulse delay-150' />
+                                    <div className='size-2 bg-primary rounded-full animate-pulse delay-300' />
+                                  </div>
+                                ) : (
+                                  <div className='prose prose-invert max-w-none'>
+                                    <ReactMarkdown>{message.content}</ReactMarkdown>
+                                  </div>
+                                )}
+                              </div>
+                              {message.role === 'assistant' && (
+                                <div className='flex justify-center'>
+                                  <button
+                                    type='button'
+                                    onClick={() => handleDelete(message.id)}
+                                    className='flex items-center gap-2 px-2 py-1 rounded-md text-foreground/60 hover:text-red-400 transition-colors'
+                                    aria-label='delete message'>
+                                    <svg
+                                      xmlns='http://www.w3.org/2000/svg'
+                                      width='14'
+                                      height='14'
+                                      viewBox='0 0 24 24'
+                                      fill='none'
+                                      stroke='currentColor'
+                                      strokeWidth='2'
+                                      strokeLinecap='round'
+                                      strokeLinejoin='round'>
+                                      <path d='M3 6h18' />
+                                      <path d='M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6' />
+                                      <path d='M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2' />
+                                    </svg>
+                                    <span className='text-xs'>Delete</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            </div>
+            {renderInputArea()}
+          </div>
+        )}
+          {/* Ambient background */}
+          <div className='absolute inset-0 bg-gradient-to-br from-secondary via-secondary/95 to-black -z-10'>
+            <div className='absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(var(--primary),0.1),transparent_50%)]' />
+            <div className='absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(var(--accent),0.05),transparent_45%)]' />
+            <div className="absolute inset-0 bg-[url('/assets/noise.png')] opacity-[0.03] mix-blend-soft-light" />
+          </div>
+
+          <div ref={chatContainerRef} className='min-h-0 flex-1 overflow-y-auto'>
+            <div className='p-6 space-y-8'>
+              {chatMessages.length === 0 ? (
+                <div className='h-full flex flex-col items-center justify-center text-center p-6 animate-fade-in'>
+                  <div className='size-20 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 border border-white/10 flex items-center justify-center mb-6 animate-pulse'>
+                    <Logo />
+                  </div>
+                  <h2 className='text-foreground/60 max-w-md text-xl md:text-2xl mb-4'>
+                    Welcome to Symbiossis
+                  </h2>
+                  <p className='font-light text-foreground/80'>
+                    Your AI companion is ready to help you with thoughtful self-reflection and personalized guidance.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {chatMessages.map((message, index) => (
+                    <div key={message.id} className='flex items-start gap-4 animate-fade-in'>
+                      {message.role === 'user' ? (
+                        <>
+                          <div className='size-10 rounded-full bg-secondary border border-white/10 items-center justify-center flex-shrink-0 mt-1 hidden md:flex'>
+                            <span className='font-semibold text-foreground/80'>You</span>
+                          </div>
+                          <div className='flex flex-col gap-2 w-full md:max-w-[calc(100%-5rem)]'>
+                            <div className='glass p-5 rounded-2xl rounded-tl-none shadow-lg'>
+                              {isEditing && message.role === 'user' ? (
+                                <textarea
+                                  ref={editInputRef}
+                                  defaultValue={message.content}
+                                  data-message-id={message.id}
+                                  onKeyDown={handleEditKeyDown}
+                                  onBlur={e => handleEditSubmit(message.id, e.target.value)}
+                                  className='w-full bg-transparent text-foreground outline-none resize-none p-0 m-0 block leading-normal'
+                                  style={{
+                                    minHeight: 'unset',
+                                    height: textareaHeight ? `${textareaHeight}px` : 'auto',
+                                    font: 'inherit',
+                                  }}
+                                />
+                              ) : (
+                                <p className='text-foreground whitespace-pre-line leading-normal'>
+                                  {message.content}
+                                </p>
+                              )}
+                            </div>
+                            {!chatIsLoading && !isEditing && message.role === 'user' && (
+                              <div className='flex justify-end gap-2'>
+                                <button
+                                  type='button'
+                                  onClick={() => setIsEditing(true)}
+                                  className='flex items-center gap-2 px-2 py-1 rounded-md text-foreground/60 hover:text-foreground/80 transition-colors'
+                                  aria-label='edit message'>
+                                  <svg
+                                    xmlns='http://www.w3.org/2000/svg'
+                                    width='14'
+                                    height='14'
+                                    viewBox='0 0 24 24'
+                                    fill='none'
+                                    stroke='currentColor'
+                                    strokeWidth='2'
+                                    strokeLinecap='round'
+                                    strokeLinejoin='round'>
+                                    <path d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z' />
+                                  </svg>
+                                  <span className='text-xs'>Edit</span>
+                                </button>
+                                <button
+                                  type='button'
+                                  onClick={() => handleDelete(message.id)}
+                                  className='flex items-center gap-2 px-2 py-1 rounded-md text-foreground/60 hover:text-red-400 transition-colors'
+                                  aria-label='delete message'>
+                                  <svg
+                                    xmlns='http://www.w3.org/2000/svg'
+                                    width='14'
+                                    height='14'
+                                    viewBox='0 0 24 24'
+                                    fill='none'
+                                    stroke='currentColor'
+                                    strokeWidth='2'
+                                    strokeLinecap='round'
+                                    strokeLinejoin='round'>
+                                    <path d='M3 6h18' />
+                                    <path d='M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6' />
+                                    <path d='M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2' />
+                                  </svg>
+                                  <span className='text-xs'>Delete</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className='hidden md:flex'>
+                            <Logo />
+                          </div>
+                          <div className='flex flex-col gap-2 w-full md:max-w-[calc(100%-5rem)]'>
+                            <div className='glass-dark p-5 rounded-2xl rounded-tl-none shadow-lg md:max-w-[calc(100%-5rem)] transition-all duration-500 opacity-100 translate-y-0'>
+                              {chatIsLoading && index === chatMessages.length - 1 ? (
+                                <div className='flex space-x-2 items-center py-2'>
+                                  <div className='size-2 bg-primary rounded-full animate-pulse' />
+                                  <div className='size-2 bg-primary rounded-full animate-pulse delay-150' />
+                                  <div className='size-2 bg-primary rounded-full animate-pulse delay-300' />
+                                </div>
+                              ) : (
+                                <div className='prose prose-invert max-w-none'>
+                                  <ReactMarkdown>{message.content}</ReactMarkdown>
+                                </div>
+                              )}
+                            </div>
+                            {message.role === 'assistant' && (
+                              <div className='flex justify-center'>
+                                <button
+                                  type='button'
+                                  onClick={() => handleDelete(message.id)}
+                                  className='flex items-center gap-2 px-2 py-1 rounded-md text-foreground/60 hover:text-red-400 transition-colors'
+                                  aria-label='delete message'>
+                                  <svg
+                                    xmlns='http://www.w3.org/2000/svg'
+                                    width='14'
+                                    height='14'
+                                    viewBox='0 0 24 24'
+                                    fill='none'
+                                    stroke='currentColor'
+                                    strokeWidth='2'
+                                    strokeLinecap='round'
+                                    strokeLinejoin='round'>
+                                    <path d='M3 6h18' />
+                                    <path d='M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6' />
+                                    <path d='M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2' />
+                                  </svg>
+                                  <span className='text-xs'>Delete</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  )
+}
