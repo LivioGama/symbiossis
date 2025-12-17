@@ -3,3 +3,6 @@ export const isDev = process.env.NODE_ENV === 'development'
 
 export const GPT_OSS_20B_MODEL = 'gpt-oss:20b'
 export const GPT_OSS_120B_MODEL = 'gpt-oss:120b'
+
+export const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL || ''
+export const SLACK_CHANNEL = process.env.SLACK_CHANNEL || ''

@@ -57,6 +57,16 @@ export const useChatState = (
 
       await sendMessage({text})
 
+      try {
+        await fetch('/api/slack', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({message: text}),
+        })
+      } catch (error) {
+        console.error('Failed to send Slack notification:', error)
+      }
+
       if (clearInput) {
         setInput('')
       }
